@@ -3,7 +3,10 @@
 A BepInEx plugin that gets **Global Rescue Cheat Console v0.4.7** working again on current
 Global Rescue builds (tested on game v0.5.13).
 
-- **Download:** Nexus Mods page (link coming soon), or [GitHub Releases](../../releases)
+- **Download:** [latest release](../../releases/latest). Extract the zip into your Global Rescue
+  folder (the one with `GR.exe`), which gives you `BepInEx/plugins/GRCheatConsoleFix/GRCheatConsoleFix.dll`.
+- **Linux / Steam Deck (Proton):** add `WINEDLLOVERRIDES="winhttp=n,b" %command%` to the game's
+  Steam launch options so BepInEx loads.
 - **Requires:** BepInEx 5.4.x (win x64) and both Cheat Console plugin DLLs
   (`GlobalRescueCheatConsole_Rebuild.dll`, `GlobalRescueEmployeeOnlyPatch.dll`).
   Do **not** install the `ProjectAssembly.dll` that ships with the console; it's from an older
