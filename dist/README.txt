@@ -1,4 +1,4 @@
-GR Cheat Console Fix v1.2.1
+GR Cheat Console Fix v1.3.0
 ===========================
 
 A fix for "Global Rescue Cheat Console" v0.4.7 (Cheat Console Rebuild 2.5.5 +
@@ -31,6 +31,8 @@ FIXED
 - No Call Cooldowns (now clears the real mission/location cooldowns)
 - Freeze Clock / Set Time
 - Freeze Employee Stats and Freeze Clock no longer slow the game down
+- Staff no longer resign while "maxed": the original Max Stats made every employee permanently
+  unsatisfied. Clicking Max Stats or turning on Freeze once repairs affected saves.
 
 ALREADY WORKED, UNCHANGED
 Vehicle cheats, research cheats, mission/task completion, restore vehicles.
@@ -40,6 +42,8 @@ NOT SUPPORTED
 - Debug/probe buttons
 
 NOTES
+- Max Stats sets XP to max, and the game pays experienced staff up to 50% more (unless they're
+  on free wages).
 - Employees working for $0 are unhappy about their pay. That's how the game works.
   Use "Freeze Employee Stats" to keep their satisfaction at maximum.
 - Back up your save before using cheats.

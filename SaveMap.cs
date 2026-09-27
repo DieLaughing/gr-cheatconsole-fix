@@ -156,13 +156,20 @@ internal static class SaveMap
 
     public static bool TrySet(object target, MemberInfo member, object value)
     {
+        if (value == null)
+        {
+            // Only nullable/reference members can be cleared (e.g. unsatisfiedSince: DateTime?).
+            var type = member is PropertyInfo pt ? pt.PropertyType : (member as FieldInfo)?.FieldType;
+            if (type == null || (type.IsValueType && Nullable.GetUnderlyingType(type) == null))
+                return false;
+        }
         switch (member)
         {
             case PropertyInfo p when p.GetSetMethod(true) != null:
-                p.SetValue(target, Convert.ChangeType(value, p.PropertyType), null);
+                p.SetValue(target, value == null ? null : Convert.ChangeType(value, Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType), null);
                 return true;
             case FieldInfo f when !f.IsInitOnly && !f.IsLiteral:
-                f.SetValue(target, Convert.ChangeType(value, f.FieldType));
+                f.SetValue(target, value == null ? null : Convert.ChangeType(value, Nullable.GetUnderlyingType(f.FieldType) ?? f.FieldType));
                 return true;
             default:
                 return false;

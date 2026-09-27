@@ -117,8 +117,9 @@ internal static class Employees
                     continue;
                 try
                 {
-                    if (SaveMap.TryGet(e, member) is object current &&
-                        Math.Abs(Convert.ToDouble(current) - Convert.ToDouble(value)) < 1e-4)
+                    object current = SaveMap.TryGet(e, member);
+                    if (value == null ? current == null
+                            : current != null && Math.Abs(Convert.ToDouble(current) - Convert.ToDouble(value)) < 1e-4)
                         continue;
                     if (SaveMap.TrySet(e, member, value))
                         writes++;
@@ -190,11 +191,11 @@ internal static class Employees
     }
 
     // Postfix on EmployeeManager.UpdateSatisfactionOfEmployees: during a freeze, put satisfaction
-    // back to max in the same call, so it never visibly drops and the UI doesn't flicker.
+    // back to max (and keep the resignation timer clear) in the same call, so it never visibly drops.
     public static void UpdateSatisfactionPostfix()
     {
         if (UnityEngine.Time.realtimeSinceStartup < _frozenUntil)
-            Apply(("satisfaction", 1f));
+            Apply(Happy);
     }
 
     public static void RefreshSatisfaction()
@@ -242,10 +243,19 @@ internal static class Employees
         return $"Employee needs refilled: {n} employee(s), {w} prop(s) set to 0.";
     }
 
-    // EmployeeOnlyPatch "skills only": raise the satisfaction ceiling to max.
+    // satisfactionLimit is the bar satisfaction must stay ABOVE (real hires get 0.15..0.35), not a
+    // skill: at or below it, "unsatisfiedSince" starts and the employee resigns after 24h (48h at a
+    // desk). The original mods set it to 1, so nobody could ever clear it. 0 is the best value, and
+    // clearing unsatisfiedSince cancels any resignation countdown already running.
+    private static readonly (string, object)[] Happy =
+    {
+        ("satisfactionLimit", 0f), ("satisfaction", 1f), ("unsatisfiedSince", null)
+    };
+
     public static string MaxStats()
     {
-        var (n, w) = Apply(("satisfactionLimit", 1f));
+        var values = new List<(string, object)>(Happy) { ("reliability", 1f), ("xp", 999999) };
+        var (n, w) = Apply(values.ToArray());
         RefreshSatisfaction();
         return $"Employee stats maxed: {n} employee(s), {w} write(s).";
     }
@@ -265,18 +275,14 @@ internal static class Employees
     // EmployeeOnlyPatch "burst"/"freeze": everything at once.
     public static string ApplyAll(bool refresh = true)
     {
-        var values = new List<(string, object)>
-        {
-            ("satisfactionLimit", 1f), ("satisfaction", 1f), ("reliability", 1f), ("xp", 999999),
-            ("salary", 0f)
-        };
+        var values = new List<(string, object)>(Happy) { ("reliability", 1f), ("xp", 999999), ("salary", 0f) };
         values.AddRange(NeedsZero());
         var (n, w) = Apply(values.ToArray());
         EnsureDesiredSalary();
         if (refresh)
         {
             RefreshSatisfaction();
-            Apply(("satisfaction", 1f));
+            Apply(Happy);
         }
         return $"Employee free+max+no fatigue: {n} employee(s), {w} write(s).";
     }

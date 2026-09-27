@@ -22,7 +22,7 @@ namespace GRCheatConsoleFix;
 //    raises an unobfuscated event (onMoneyChanged, ...) that the UI and other managers listen to;
 //  - employees: members are learned from the game's own save routine (see SaveMap);
 //  - bases / mission cooldowns: the only collection of the right element type on the manager.
-[BepInPlugin("justinpints.globalrescue.cheatconsolefix", "GR Cheat Console Fix", "1.2.1")]
+[BepInPlugin("justinpints.globalrescue.cheatconsolefix", "GR Cheat Console Fix", "1.3.0")]
 [BepInDependency(ConsoleGuid)]
 [BepInDependency(BridgeGuid)]
 public class Plugin : BaseUnityPlugin

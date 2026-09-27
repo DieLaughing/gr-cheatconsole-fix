@@ -32,6 +32,7 @@ console methods with versions that locate members this way:
 | Employee lists / bases | Every `List<T>` / `HashSet<T>` of `Employee` / `Base` on the relevant manager. |
 | No Call Cooldowns | `MissionManager`'s only `Dictionary<string, DateTime>`, which holds recent `mission-location` spawns that are excluded from new calls. |
 | Time | The public `TimeManager.SetTime(DateTime)`. |
+| Staff resigning while "maxed" | The original "Max Stats" set `satisfactionLimit` to 1, but that's the bar satisfaction must stay *above* (new hires get 0.15–0.35), not a skill. At 1 nobody could clear it, so the game's "unsatisfied since" timer ran until employees resigned (after 24 in-game hours, 48 at a desk). Max Stats, Free + Max + No Fatigue and Freeze now set the bar to 0 and clear the timer, which also repairs saves the old buttons affected. Max Stats now actually maxes reliability and XP too. |
 | Freeze Employee Stats | The console and the bridge each ran their own freeze loop, and the satisfaction they set fought the game's own recalculation. The employee UI redraws whenever these values change, so the game crawled. Now one loop runs once a second, skips values that are already right, and re-pins satisfaction right after the game recalculates it. |
 | Free wages stay $0 | The employee panel's wage slider is two-way bound with a minimum of `MinSalary`, which would clamp $0 back up. A postfix returns 0 for employees already at $0, and another keeps saved $0 wages through the game's load-time clamp. |
 
