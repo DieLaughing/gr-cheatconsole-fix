@@ -1,4 +1,4 @@
-GR Cheat Console Fix v1.2.0
+GR Cheat Console Fix v1.2.1
 ===========================
 
 A fix for "Global Rescue Cheat Console" v0.4.7 (Cheat Console Rebuild 2.5.5 +
@@ -30,6 +30,7 @@ FIXED
 - Enable All Base Departments
 - No Call Cooldowns (now clears the real mission/location cooldowns)
 - Freeze Clock / Set Time
+- Freeze Employee Stats and Freeze Clock no longer slow the game down
 
 ALREADY WORKED, UNCHANGED
 Vehicle cheats, research cheats, mission/task completion, restore vehicles.

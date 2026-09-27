@@ -16,6 +16,14 @@ internal static class Employees
 
     private static Dictionary<string, MemberInfo> _map;
     private static Type _employeeType;
+    private static Type _managerType;
+    private static List<FieldInfo> _collections;
+    private static List<UnityEngine.Object> _managers = new List<UnityEngine.Object>();
+    private static float _managersFoundAt = -999f;
+    private static float _nextFreeze;
+
+    // While a freeze is running, satisfaction is re-pinned right after the game recomputes it.
+    private static float _frozenUntil;
 
     private static bool EnsureMap()
     {
@@ -37,21 +45,41 @@ internal static class Employees
         return _map.Count > 0;
     }
 
+    // Scene searches are slow, so reuse the managers until one is destroyed (e.g. a save reload).
+    private static List<UnityEngine.Object> Managers()
+    {
+        float now = UnityEngine.Time.realtimeSinceStartup;
+        bool stale = _managers.Count == 0 || _managers.Any(m => m == null);
+        if (stale && now - _managersFoundAt > 1f)
+        {
+            _managers = Plugin.FindLiveInstances(_managerType);
+            _managersFoundAt = now;
+        }
+        return _managers;
+    }
+
     public static List<object> GetAll()
     {
         var result = new List<object>();
-        var managerType = AccessTools.TypeByName("EmployeeManager");
-        if (managerType == null || !EnsureMap())
+        if (!EnsureMap())
             return result;
-
-        // Every List<Employee>/HashSet<Employee> the manager holds (hired staff and friends).
-        var seen = new HashSet<object>();
-        var collections = managerType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Where(f => ElementType(f.FieldType) is Type t && _employeeType.IsAssignableFrom(t))
-            .ToList();
-        foreach (var manager in Plugin.FindLiveInstances(managerType))
+        if (_managerType == null)
         {
-            foreach (var field in collections)
+            _managerType = AccessTools.TypeByName("EmployeeManager");
+            if (_managerType == null)
+                return result;
+            // Every List<Employee>/HashSet<Employee> the manager holds (applicants and hired staff).
+            _collections = _managerType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(f => ElementType(f.FieldType) is Type t && _employeeType.IsAssignableFrom(t))
+                .ToList();
+        }
+
+        var seen = new HashSet<object>();
+        foreach (var manager in Managers())
+        {
+            if (manager == null)
+                continue;
+            foreach (var field in _collections)
             {
                 if (field.GetValue(manager) is IEnumerable items)
                 {
@@ -74,7 +102,9 @@ internal static class Employees
         return args.Length == 1 ? args[0] : null;
     }
 
-    // Sets each named save field on every employee; returns (employees, writes).
+    // Sets each named save field on every employee; returns (employees, writes). Values that are
+    // already right are skipped: the employee UI redraws whenever these values change, and some
+    // setters have side effects (e.g. shower toggles particles).
     public static (int employees, int writes) Apply(params (string key, object value)[] values)
     {
         var employees = GetAll();
@@ -87,6 +117,9 @@ internal static class Employees
                     continue;
                 try
                 {
+                    if (SaveMap.TryGet(e, member) is object current &&
+                        Math.Abs(Convert.ToDouble(current) - Convert.ToDouble(value)) < 1e-4)
+                        continue;
                     if (SaveMap.TrySet(e, member, value))
                         writes++;
                 }
@@ -111,11 +144,17 @@ internal static class Employees
     // The employee panel's wage slider is two-way bound to EmployeeUIData.Salary with its low
     // end at MinSalary (= desiredSalary * 0.7), so showing a $0 employee clamps the wage back up.
     // Let the slider go to 0 for employees who were made free.
+    // UI bindings read this every frame, so the Employee property lookup is cached per type.
+    private static readonly Dictionary<Type, PropertyInfo> UiEmployeeProperty = new Dictionary<Type, PropertyInfo>();
+
     public static void MinSalaryPostfix(object __instance, ref float __result)
     {
         try
         {
-            if (AccessTools.Property(__instance.GetType(), "Employee")?.GetValue(__instance, null) is object e && IsFree(e))
+            var type = __instance.GetType();
+            if (!UiEmployeeProperty.TryGetValue(type, out var prop))
+                UiEmployeeProperty[type] = prop = AccessTools.Property(type, "Employee");
+            if (prop?.GetValue(__instance, null) is object e && IsFree(e))
                 __result = 0f;
         }
         catch
@@ -150,14 +189,24 @@ internal static class Employees
             .Where(m => !m.IsAbstract && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == save);
     }
 
+    // Postfix on EmployeeManager.UpdateSatisfactionOfEmployees: during a freeze, put satisfaction
+    // back to max in the same call, so it never visibly drops and the UI doesn't flicker.
+    public static void UpdateSatisfactionPostfix()
+    {
+        if (UnityEngine.Time.realtimeSinceStartup < _frozenUntil)
+            Apply(("satisfaction", 1f));
+    }
+
     public static void RefreshSatisfaction()
     {
-        var managerType = AccessTools.TypeByName("EmployeeManager");
-        var update = managerType == null ? null : AccessTools.Method(managerType, "UpdateSatisfactionOfEmployees");
+        GetAll();
+        var update = _managerType == null ? null : AccessTools.Method(_managerType, "UpdateSatisfactionOfEmployees");
         if (update == null)
             return;
-        foreach (var manager in Plugin.FindLiveInstances(managerType))
+        foreach (var manager in Managers())
         {
+            if (manager == null)
+                continue;
             try { update.Invoke(manager, null); }
             catch (Exception ex) { Plugin.Log.LogDebug("UpdateSatisfactionOfEmployees: " + (ex.InnerException ?? ex).Message); }
         }
@@ -201,8 +250,20 @@ internal static class Employees
         return $"Employee stats maxed: {n} employee(s), {w} write(s).";
     }
 
+    // Both the console's freeze toggle and the Employee Bridge's burst/freeze loop call this,
+    // each on its own timer; run the actual work at most once per second between them.
+    public static void FreezeTick()
+    {
+        float now = UnityEngine.Time.realtimeSinceStartup;
+        _frozenUntil = now + 2.5f;
+        if (now < _nextFreeze)
+            return;
+        _nextFreeze = now + 1f;
+        ApplyAll(refresh: false);
+    }
+
     // EmployeeOnlyPatch "burst"/"freeze": everything at once.
-    public static string ApplyAll()
+    public static string ApplyAll(bool refresh = true)
     {
         var values = new List<(string, object)>
         {
@@ -212,8 +273,11 @@ internal static class Employees
         values.AddRange(NeedsZero());
         var (n, w) = Apply(values.ToArray());
         EnsureDesiredSalary();
-        RefreshSatisfaction();
-        Apply(("satisfaction", 1f));
+        if (refresh)
+        {
+            RefreshSatisfaction();
+            Apply(("satisfaction", 1f));
+        }
         return $"Employee free+max+no fatigue: {n} employee(s), {w} write(s).";
     }
 }

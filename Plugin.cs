@@ -22,7 +22,7 @@ namespace GRCheatConsoleFix;
 //    raises an unobfuscated event (onMoneyChanged, ...) that the UI and other managers listen to;
 //  - employees: members are learned from the game's own save routine (see SaveMap);
 //  - bases / mission cooldowns: the only collection of the right element type on the manager.
-[BepInPlugin("justinpints.globalrescue.cheatconsolefix", "GR Cheat Console Fix", "1.2.0")]
+[BepInPlugin("justinpints.globalrescue.cheatconsolefix", "GR Cheat Console Fix", "1.2.1")]
 [BepInDependency(ConsoleGuid)]
 [BepInDependency(BridgeGuid)]
 public class Plugin : BaseUnityPlugin
@@ -55,7 +55,15 @@ public class Plugin : BaseUnityPlugin
         Patch(harmony, console, "GetEmployeeList", nameof(GetEmployeeListPrefix));
         Patch(harmony, console, "EnableAllBaseDepartments", nameof(EnableAllBaseDepartmentsPrefix));
         Patch(harmony, console, "ClearDictionary", nameof(ClearDictionaryPrefix));
+        Patch(harmony, console, "FreezeEmployeeStatsTick", nameof(FreezeTickPrefix));
         PatchFreeWages(harmony);
+
+        var employeeManager = AccessTools.TypeByName("EmployeeManager");
+        var updateSatisfaction = employeeManager == null ? null : AccessTools.Method(employeeManager, "UpdateSatisfactionOfEmployees");
+        if (updateSatisfaction != null)
+            harmony.Patch(updateSatisfaction, postfix: new HarmonyMethod(typeof(Employees), nameof(Employees.UpdateSatisfactionPostfix)));
+        else
+            Log.LogWarning("EmployeeManager.UpdateSatisfactionOfEmployees not found; frozen satisfaction may flicker.");
 
         var bridge = AccessTools.TypeByName(BridgeType);
         if (bridge == null)
@@ -68,6 +76,7 @@ public class Plugin : BaseUnityPlugin
         Patch(harmony, bridge, "GatherEmployees", nameof(GatherEmployeesPrefix));
         Patch(harmony, bridge, "LogFirstEmployeeDiagnostic", nameof(SkipPrefix));
         Patch(harmony, bridge, "ForceCurrentDateTime", nameof(ForceCurrentDateTimePrefix));
+        Patch(harmony, bridge, "FreezeClockTickBridge", nameof(FreezeClockTickPrefix));
     }
 
     private static void PatchFreeWages(Harmony harmony)
@@ -163,11 +172,20 @@ public class Plugin : BaseUnityPlugin
 
     // ---- EmployeeOnlyPatch actions ----
 
+    // verbose = the "Free + Max + No Fatigue" button; otherwise it's the bridge's burst/freeze loop.
     private static bool ApplyEmployeesPrefix(bool verbose)
     {
-        string msg = Employees.ApplyAll();
         if (verbose)
-            Report(msg);
+            Report(Employees.ApplyAll());
+        else
+            Employees.FreezeTick();
+        return false;
+    }
+
+    // The console's freeze toggle ran free + max + needs as three separate passes every second.
+    private static bool FreezeTickPrefix()
+    {
+        Employees.FreezeTick();
         return false;
     }
 
@@ -184,6 +202,23 @@ public class Plugin : BaseUnityPlugin
     }
 
     private static bool SkipPrefix() => false;
+
+    private static float _nextClockTick;
+    private static int _lastClockTarget = -1;
+
+    // The console calls this every frame while Freeze Clock is on, and each call searches the
+    // scene, refreshes the skybox and writes a log line. TimeManager.Update is already gated off
+    // during the freeze, so re-applying once a second (or when the target time changes) is enough.
+    private static bool FreezeClockTickPrefix(int hour, int minute)
+    {
+        float now = Time.realtimeSinceStartup;
+        int target = hour * 60 + minute;
+        if (target == _lastClockTarget && now < _nextClockTick)
+            return false;
+        _lastClockTarget = target;
+        _nextClockTick = now + 1f;
+        return true;
+    }
 
     // The bridge wrote the clock through an obfuscated static field; use the public setter.
     private static bool ForceCurrentDateTimePrefix(Type timeType, DateTime target)

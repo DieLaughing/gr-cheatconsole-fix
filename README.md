@@ -32,6 +32,7 @@ console methods with versions that locate members this way:
 | Employee lists / bases | Every `List<T>` / `HashSet<T>` of `Employee` / `Base` on the relevant manager. |
 | No Call Cooldowns | `MissionManager`'s only `Dictionary<string, DateTime>`, which holds recent `mission-location` spawns that are excluded from new calls. |
 | Time | The public `TimeManager.SetTime(DateTime)`. |
+| Freeze Employee Stats | The console and the bridge each ran their own freeze loop, and the satisfaction they set fought the game's own recalculation. The employee UI redraws whenever these values change, so the game crawled. Now one loop runs once a second, skips values that are already right, and re-pins satisfaction right after the game recalculates it. |
 | Free wages stay $0 | The employee panel's wage slider is two-way bound with a minimum of `MinSalary`, which would clamp $0 back up. A postfix returns 0 for employees already at $0, and another keeps saved $0 wages through the game's load-time clamp. |
 
 If a future update changes a shape, the fix logs a warning to `BepInEx/LogOutput.log` and leaves
@@ -41,10 +42,12 @@ the value alone. It never guesses.
 
 - Cheat Console: `SetMoney`, `SetResearch`, `SetReputation`, `MakeEmployeesFreeFromManager`,
   `ZeroEmployeeFatigueFromManager`, `GetEmployeeList`, `EnableAllBaseDepartments`,
-  `ClearDictionary` (only its `CallManager` use)
+  `ClearDictionary` (only its `CallManager` use), `FreezeEmployeeStatsTick`
 - Employee Bridge: `ApplyEmployees`, `ApplyEmployeeSkillsOnly`, `GatherEmployees`,
-  `ForceCurrentDateTime`, `LogFirstEmployeeDiagnostic` (disabled; it only logged broken lookups)
-- Game: `EmployeeUIData.MinSalary` getter and the `Employee` save loader (postfixes, only for $0 wages)
+  `ForceCurrentDateTime`, `FreezeClockTickBridge` (throttled to once a second),
+  `LogFirstEmployeeDiagnostic` (disabled; it only logged broken lookups)
+- Game: `EmployeeUIData.MinSalary` getter and the `Employee` save loader (postfixes, only for $0 wages);
+  `EmployeeManager.UpdateSatisfactionOfEmployees` (postfix, only while Freeze Employee Stats is on)
 
 ### What it does not do
 
